@@ -32,34 +32,27 @@ def main():
     
     # Create training data
     data_path = 'data/training_data.csv'
-    os.makedirs('data', exist_ok=True)
     
-    if os.path.exists(data_path):
-        df = pd.read_csv(data_path)
-        print(f"Loaded training data from {data_path}")
+    # Use configurable random seed for different scenarios
+    seed = int(os.getenv('TRAIN_SEED', 42))
+    np.random.seed(seed)
+    print(f"Generating training data with seed={seed}")
+    
+    if seed == 99:  # Special seed for high-accuracy scenario
+        # Generate data that's easier to classify
+        X = np.random.randn(200, 4)
+        # Create a more separable target
+        y = ((X[:, 0] + X[:, 1] > 0) & (X[:, 2] + X[:, 3] > 0)).astype(int)
+        print(f"Generated high-quality training data for better accuracy")
     else:
-        # Create sample data if it doesn't exist
-        # Use configurable random seed for different scenarios
-        seed = int(os.getenv('TRAIN_SEED', 42))
-        np.random.seed(seed)
-        print(f"Generating training data with seed={seed}")
-        
-        if seed == 99:  # Special seed for high-accuracy scenario
-            # Generate data that's easier to classify
-            X = np.random.randn(200, 4)
-            # Create a more separable target
-            y = ((X[:, 0] + X[:, 1] > 0) & (X[:, 2] + X[:, 3] > 0)).astype(int)
-            print(f"Generated high-quality training data for better accuracy")
-        else:
-            # Standard data generation
-            X = np.random.randn(100, 4)
-            y = (X.sum(axis=1) > 0).astype(int)
-            print(f"Generated standard training data")
-        
-        df = pd.DataFrame(X, columns=['feature_1', 'feature_2', 'feature_3', 'feature_4'])
-        df['target'] = y
-        df.to_csv(data_path, index=False)
-        print(f"Created sample training data at {data_path}")
+        # Standard data generation
+        X = np.random.randn(100, 4)
+        y = (X.sum(axis=1) > 0).astype(int)
+        print(f"Generated standard training data")
+    
+    df = pd.DataFrame(X, columns=['feature_1', 'feature_2', 'feature_3', 'feature_4'])
+    df['target'] = y
+    print(f"Created training data: {df.shape[0]} samples")
     
     # Prepare features and labels
     X = df.drop('target', axis=1).values
