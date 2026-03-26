@@ -42,7 +42,7 @@ jobs:
           dvc pull || echo "DVC pull skipped - no remote configured"
           # Create sample data for demo purposes
           mkdir -p data
-          python -c "
+          python << 'EOF'
 import numpy as np
 import pandas as pd
 np.random.seed(42)
@@ -52,7 +52,7 @@ df = pd.DataFrame(X, columns=['feature_1', 'feature_2', 'feature_3', 'feature_4'
 df['target'] = y
 df.to_csv('data/training_data.csv', index=False)
 print('Sample data created')
-"
+EOF
 
       - name: Train model
         id: train
