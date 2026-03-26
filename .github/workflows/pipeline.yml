@@ -58,6 +58,7 @@ print('Sample data created')
         id: train
         env:
           MLFLOW_TRACKING_URI: ${{ env.MLFLOW_TRACKING_URI }}
+          TRAIN_SEED: 99
         run: |
           python train.py
           echo "Training completed"
