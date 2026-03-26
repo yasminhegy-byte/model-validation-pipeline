@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI || 'http://localhost:5000' }}
+  MLFLOW_TRACKING_URI: file:./mlruns
   MLFLOW_EXPERIMENT_NAME: classifier-training
 
 jobs:
@@ -68,46 +68,15 @@ print('Sample data created')
         env:
           MLFLOW_TRACKING_URI: ${{ env.MLFLOW_TRACKING_URI }}
         run: |
-          python -c "
-import mlflow
-import os
-import json
-
-mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
-
-# Get the latest run from the experiment
-experiment = mlflow.get_experiment_by_name('${{ env.MLFLOW_EXPERIMENT_NAME }}')
-if experiment:
-    runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], max_results=1)
-    if not runs.empty:
-        run_id = runs.iloc[0]['run_id']
-        accuracy = runs.iloc[0]['metrics.accuracy']
-        print(f'Found run: {run_id} with accuracy: {accuracy}')
-    else:
-        print('No runs found in experiment')
-        exit(1)
-else:
-    print('Experiment not found')
-    exit(1)
-" > run_output.txt
-          
-          cat run_output.txt
-          # Extract run ID from output
-          RUN_ID=$(python -c "
-import mlflow
-import os
-
-mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
-experiment = mlflow.get_experiment_by_name('${{ env.MLFLOW_EXPERIMENT_NAME }}')
-if experiment:
-    runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], max_results=1)
-    if not runs.empty:
-        print(runs.iloc[0]['run_id'])
-")
-          
-          echo "$RUN_ID" > model_info.txt
-          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
-          cat model_info.txt
+          # Check if model_info.txt was created by train.py
+          if [ -f model_info.txt ]; then
+            RUN_ID=$(cat model_info.txt)
+            echo "Found Run ID: $RUN_ID"
+            echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          else
+            echo "ERROR: model_info.txt not found"
+            exit 1
+          fi
 
       - name: Upload model info artifact
         uses: actions/upload-artifact@v4
@@ -144,7 +113,7 @@ if experiment:
       - name: Check performance threshold
         id: check_threshold
         env:
-          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI || 'http://localhost:5000' }}
+          MLFLOW_TRACKING_URI: file:./mlruns
         run: |
           python check_threshold.py
           echo "Threshold check passed"
