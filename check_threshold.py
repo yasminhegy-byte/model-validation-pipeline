@@ -10,6 +10,7 @@ def check_accuracy_threshold():
     mlflow_uri = os.getenv('MLFLOW_TRACKING_URI', None)
     if mlflow_uri is None:
         mlflow_uri = 'file:./mlruns'
+        os.makedirs('mlruns', exist_ok=True)
         print(f"Using local MLflow backend: {mlflow_uri}")
     
     mlflow.set_tracking_uri(mlflow_uri)

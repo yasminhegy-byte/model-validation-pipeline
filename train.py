@@ -1,7 +1,9 @@
 import os
+import sys
 import mlflow
 import numpy as np
 import pandas as pd
+import joblib
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
@@ -15,6 +17,7 @@ def main():
     if mlflow_uri is None:
         # Use local file-based backend for development
         mlflow_uri = 'file:./mlruns'
+        os.makedirs('mlruns', exist_ok=True)
         print(f"Using local MLflow backend: {mlflow_uri}")
     
     mlflow.set_tracking_uri(mlflow_uri)
@@ -29,6 +32,8 @@ def main():
     
     # Create training data
     data_path = 'data/training_data.csv'
+    os.makedirs('data', exist_ok=True)
+    
     if os.path.exists(data_path):
         df = pd.read_csv(data_path)
         print(f"Loaded training data from {data_path}")
@@ -37,22 +42,24 @@ def main():
         # Use configurable random seed for different scenarios
         seed = int(os.getenv('TRAIN_SEED', 42))
         np.random.seed(seed)
+        print(f"Generating training data with seed={seed}")
+        
         if seed == 99:  # Special seed for high-accuracy scenario
             # Generate data that's easier to classify
             X = np.random.randn(200, 4)
             # Create a more separable target
             y = ((X[:, 0] + X[:, 1] > 0) & (X[:, 2] + X[:, 3] > 0)).astype(int)
-            print(f"Generated high-quality training data (seed={seed}) for better accuracy")
+            print(f"Generated high-quality training data for better accuracy")
         else:
             # Standard data generation
             X = np.random.randn(100, 4)
             y = (X.sum(axis=1) > 0).astype(int)
-            print(f"Generated standard training data (seed={seed})")
+            print(f"Generated standard training data")
         
         df = pd.DataFrame(X, columns=['feature_1', 'feature_2', 'feature_3', 'feature_4'])
         df['target'] = y
-        os.makedirs('data', exist_ok=True)
         df.to_csv(data_path, index=False)
+        print(f"Created sample training data at {data_path}")
     
     # Prepare features and labels
     X = df.drop('target', axis=1).values
@@ -105,7 +112,6 @@ def main():
         
         # Save model locally
         model_path = 'model.pkl'
-        import joblib
         joblib.dump(model, model_path)
         print(f"Model saved to {model_path}")
         
@@ -116,7 +122,14 @@ def main():
         with open('model_info.txt', 'w') as f:
             f.write(run_id)
         print(f"Run ID saved to model_info.txt: {run_id}")
-        print(f"Run ID saved: {run_id}")
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+        print("✅ Training completed successfully!")
+        sys.exit(0)
+    except Exception as e:
+        print(f"❌ ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
