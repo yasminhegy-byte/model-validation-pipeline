@@ -1,0 +1,163 @@
+name: Model Validation and Deployment Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI || 'http://localhost:5000' }}
+  MLFLOW_EXPERIMENT_NAME: classifier-training
+
+jobs:
+  validate:
+    name: Validate Model
+    runs-on: ubuntu-latest
+    outputs:
+      model_run_id: ${{ steps.export_model_info.outputs.run_id }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install dvc[gs] mlflow scikit-learn numpy pandas
+
+      - name: Configure DVC
+        run: |
+          dvc config core.autostage true
+          echo "DVC configured"
+
+      - name: Pull data with DVC
+        run: |
+          echo "Simulating DVC pull (no remote configured)"
+          dvc pull || echo "DVC pull skipped - no remote configured"
+          # Create sample data for demo purposes
+          mkdir -p data
+          python -c "
+import numpy as np
+import pandas as pd
+np.random.seed(42)
+X = np.random.randn(100, 4)
+y = (X.sum(axis=1) > 0).astype(int)
+df = pd.DataFrame(X, columns=['feature_1', 'feature_2', 'feature_3', 'feature_4'])
+df['target'] = y
+df.to_csv('data/training_data.csv', index=False)
+print('Sample data created')
+"
+
+      - name: Train model
+        id: train
+        env:
+          MLFLOW_TRACKING_URI: ${{ env.MLFLOW_TRACKING_URI }}
+        run: |
+          python train.py
+          echo "Training completed"
+
+      - name: Export model info
+        id: export_model_info
+        env:
+          MLFLOW_TRACKING_URI: ${{ env.MLFLOW_TRACKING_URI }}
+        run: |
+          python -c "
+import mlflow
+import os
+import json
+
+mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
+
+# Get the latest run from the experiment
+experiment = mlflow.get_experiment_by_name('${{ env.MLFLOW_EXPERIMENT_NAME }}')
+if experiment:
+    runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], max_results=1)
+    if not runs.empty:
+        run_id = runs.iloc[0]['run_id']
+        accuracy = runs.iloc[0]['metrics.accuracy']
+        print(f'Found run: {run_id} with accuracy: {accuracy}')
+    else:
+        print('No runs found in experiment')
+        exit(1)
+else:
+    print('Experiment not found')
+    exit(1)
+" > run_output.txt
+          
+          cat run_output.txt
+          # Extract run ID from output
+          RUN_ID=$(python -c "
+import mlflow
+import os
+
+mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
+experiment = mlflow.get_experiment_by_name('${{ env.MLFLOW_EXPERIMENT_NAME }}')
+if experiment:
+    runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], max_results=1)
+    if not runs.empty:
+        print(runs.iloc[0]['run_id'])
+")
+          
+          echo "$RUN_ID" > model_info.txt
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          cat model_info.txt
+
+      - name: Upload model info artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-info
+          path: model_info.txt
+          retention-days: 7
+
+  deploy:
+    name: Deploy Model
+    runs-on: ubuntu-latest
+    needs: validate
+    if: success()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mlflow scikit-learn
+
+      - name: Download model info artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: model-info
+
+      - name: Check performance threshold
+        id: check_threshold
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI || 'http://localhost:5000' }}
+        run: |
+          python check_threshold.py
+          echo "Threshold check passed"
+
+      - name: Build Docker image (Mock)
+        run: |
+          RUN_ID=$(cat model_info.txt)
+          echo "Building Docker image for Run ID: $RUN_ID"
+          docker build -t model-classifier:$RUN_ID --build-arg RUN_ID=$RUN_ID .
+          echo "Mock Docker build completed for Run ID: $RUN_ID"
+
+      - name: Deployment Summary
+        run: |
+          RUN_ID=$(cat model_info.txt)
+          echo "✅ Deployment successful!"
+          echo "Model Run ID: $RUN_ID"
+          echo "Docker image: model-classifier:$RUN_ID"
