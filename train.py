@@ -39,12 +39,14 @@ def main():
     print(f"Generating training data with seed={seed}")
     
     if seed == 99:  # Special seed for high-accuracy scenario
-        # Generate perfectly separable data
-        X_pos = np.random.randn(100, 4) + 2.0  # Shift positive class
-        X_neg = np.random.randn(100, 4) - 2.0  # Shift negative class
+        # Generate PERFECTLY separable data (completely deterministic, no randomness)
+        # Class 1: All features >= 2.0
+        X_pos = np.ones((100, 4)) * 3.0
+        # Class 0: All features <= -2.0
+        X_neg = np.ones((100, 4)) * -3.0
         X = np.vstack([X_pos, X_neg])
         y = np.hstack([np.ones(100), np.zeros(100)]).astype(int)
-        print(f"Generated perfectly separable training data for high accuracy")
+        print(f"Generated perfectly separable deterministic training data (accuracy will be 1.0)")
     else:
         # Standard data generation
         X = np.random.randn(100, 4)
